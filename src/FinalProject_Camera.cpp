@@ -110,7 +110,7 @@ int main(int argc, const char *argv[])
     vector<DataFrame> dataBuffer;                 // list of data frames which are held in memory at the same time
     bool bVis = true;                             // visualize results
 
-    bool verbose = false;
+    bool verbose = true;
     bool visualize_result = false;
     bool visualize_matches = false;
     bool print_header = true;
@@ -139,6 +139,7 @@ int main(int argc, const char *argv[])
 
             double ttc_camera = 0;
             double ttc_lidar = 0;
+            double ttc_lidar_min = 0;
 
             t_total = (double)cv::getTickCount();
             //https://knowledge.udacity.com/questions/105392
@@ -206,10 +207,10 @@ int main(int argc, const char *argv[])
                     clusterLidarWithROI((dataBuffer.end() - 1)->boundingBoxes, (dataBuffer.end() - 1)->lidarPoints, shrinkFactor, P_rect_00, R_rect_00, RT);
 
                     // Visualize 3D objects
-                    bVis = false;
+                    bVis = true;
                     if (bVis)
                     {
-                        show3DObjects((dataBuffer.end() - 1)->boundingBoxes, cv::Size(4.0, 20.0), cv::Size(2000, 2000), true, imgNumber.str());
+                        show3DObjects((dataBuffer.end() - 1)->boundingBoxes, cv::Size(4.0, 20.0), cv::Size(2000, 2000), false, imgNumber.str());
                     }
                     //bVis = false;
                     if (verbose)
@@ -305,7 +306,7 @@ int main(int argc, const char *argv[])
                         //// STUDENT ASSIGNMENT
                         //// TASK FP.1 -> match list of 3D objects (vector<BoundingBox>) between current and previous frame (implement ->matchBoundingBoxes)
                         map<int, int> bbBestMatches;
-                        matchBoundingBoxes(matches, bbBestMatches, *(dataBuffer.end() - 2), *(dataBuffer.end() - 1)); // associate bounding boxes between current and previous frame using keypoint matches
+                        matchBoundingBoxes(matches, bbBestMatches, *(dataBuffer.end() - 2), *(dataBuffer.end() - 1), imgNumber.str(), *it_detector, *it_descriptor); // associate bounding boxes between current and previous frame using keypoint matches
                         //// EOF STUDENT ASSIGNMENT
 
                         // store matches in current data frame
@@ -342,9 +343,10 @@ int main(int argc, const char *argv[])
                             {
                                 //// STUDENT ASSIGNMENT
                                 //// TASK FP.2 -> compute time-to-collision based on Lidar data (implement -> computeTTCLidar)
-                                double ttcLidar;
-                                computeTTCLidar(prevBB->lidarPoints, currBB->lidarPoints, sensorFrameRate, ttcLidar);
+                                double ttcLidar, ttcLidar_min;
+                                computeTTCLidar(prevBB->lidarPoints, currBB->lidarPoints, sensorFrameRate, ttcLidar, ttcLidar_min);
                                 ttc_lidar = ttcLidar;
+                                ttc_lidar_min = ttcLidar_min;
                                 //// EOF STUDENT ASSIGNMENT
 
                                 //// STUDENT ASSIGNMENT
@@ -354,7 +356,8 @@ int main(int argc, const char *argv[])
                                 clusterKptMatchesWithROI(*currBB, (dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->kptMatches);
                                 computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
                                 //computeTTCCamera(prevBB->keypoints, currBB->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
-
+                                string detector = *it_detector;
+                                string descriptor = *it_descriptor;
                                 bVis = false;
                                 // visualize results
                                 if (bVis)
@@ -365,13 +368,17 @@ int main(int argc, const char *argv[])
 
                                     string windowName = "Keypoints";
                                     cv::namedWindow(windowName, 6);
-                                    imshow(windowName, visImage);
-                                    cv::waitKey(0);
+
+                                    string filename = "./images/saved/" + detector + "/Keypoints_" + detector + "_" + descriptor + "_" + imgNumber.str() + "_" + to_string(currBB->boxID) + ".jpg";
+                                    //string filename = "./images/saved/Keypoints_" + imgNumber.str() + "_" + to_string(currBB->boxID) + ".jpg";
+                                    //cv::imwrite(filename, visImage);
+                                    //imshow(windowName, visImage);
+                                    //cv::waitKey(0);
                                 }
                                 ttc_camera = ttcCamera;
                                 //// EOF STUDENT ASSIGNMENT
 
-                                bVis = false;
+                                bVis = true;
                                 if (bVis)
                                 {
                                     cv::Mat visImg = (dataBuffer.end() - 1)->cameraImg.clone();
@@ -379,14 +386,20 @@ int main(int argc, const char *argv[])
                                     cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y), cv::Point(currBB->roi.x + currBB->roi.width, currBB->roi.y + currBB->roi.height), cv::Scalar(0, 255, 0), 2);
 
                                     char str[200];
-                                    sprintf(str, "TTC Lidar : %f s, TTC Camera : %f s", ttcLidar, ttcCamera);
+                                    char str1[200];
+                                    sprintf(str, "TTC Lidar Min : %f s, TTC Camera : %f s", ttc_lidar_min, ttcCamera);
                                     putText(visImg, str, cv::Point2f(80, 50), cv::FONT_HERSHEY_PLAIN, 2, cv::Scalar(0, 0, 255), 2);
+                                    sprintf(str1, "TTC Lidar Med : %f s", ttcLidar);
+                                    putText(visImg, str1, cv::Point2f(80, 80), cv::FONT_HERSHEY_PLAIN, 2, cv::Scalar(0, 0, 255), 2);
 
                                     string windowName = "Final Results : TTC";
                                     cv::namedWindow(windowName, 4);
-                                    cv::imshow(windowName, visImg);
-                                    std::cout << "Press key to continue to next frame" << endl;
-                                    cv::waitKey(0);
+                                    //cv::imshow(windowName, visImg);
+                                    string filename = "./images/saved/" + detector + "/TTC_" + detector + "_" + descriptor + "_" + imgNumber.str() + "_" + to_string(currBB->boxID) + ".jpg";
+                                    //string filename = "./images/saved/Keypoints_" + imgNumber.str() + "_" + to_string(currBB->boxID) + ".jpg";
+                                    cv::imwrite(filename, visImg);
+                                    //std::cout << "Press key to continue to next frame" << endl;
+                                    //cv::waitKey(0);
                                 }
                                 bVis = false;
 
@@ -419,6 +432,8 @@ int main(int argc, const char *argv[])
                                << "t_total"
                                << ","
                                << "imgNumber"
+                               << ","
+                               << "ttc_lidar_min"
                                << endl;
 
                         print_header = false;
@@ -448,7 +463,8 @@ int main(int argc, const char *argv[])
                                << ttc_camera << ","
                                << ttc_lidar << ","
                                << 1000 * (t_detect + t_extraction + t_match) / 1.0 << ","
-                               << imgNumber.str()
+                               << imgNumber.str() << ","
+                               << ttc_lidar_min
                                << endl;
                     }
 

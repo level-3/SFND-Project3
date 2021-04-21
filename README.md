@@ -8,6 +8,7 @@
 
 *Implement the method "matchBoundingBoxes", which takes as input both the previous and the current data frames and provides as output the ids of the matched regions of interest (i.e. the boxID property). Matches must be the ones with the highest number of keypoint correspondences.*
 
+Constructed an outer loop over the matched keypoints, then found which keypoints were contained in the previous and current frame, then stored these in a multimap. The matched keypoints were then counted to find the highest frequency (mode), then stored the current and previous bounding box in a multimap.
 
 ```cpp
 void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
@@ -15,8 +16,6 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
     // basic Idea = use keypoint matches between the previous and current image
     std::multimap<int, int> potential_matches;
     typedef std::multimap<int, int>::iterator MMAPIterator;
-
-   
 
     //outer loop over keypoint matches
 
@@ -105,6 +104,7 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
 
 *Compute the time-to-collision in second for all matched 3D objects using only Lidar measurements from the matched bounding boxes between current and previous frame.*
 
+The median lidar points in the bounding box were selected to avoid any miscalculation due to outliers. The constant velocity model was used to calculate the approximate time to collision, this assumes that the rate of change of distance is linear. 
 
 ```cpp
 void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
@@ -129,6 +129,7 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<Lidar
 
 *Prepare the TTC computation based on camera measurements by associating keypoint correspondences to the bounding boxes which enclose them. All matches which satisfy this condition must be added to a vector in the respective bounding box.*
 
+The total distance between all matched keypoints for the bounding box were calculated and divided by the total number of keypoints for that bounding box to get the mean distance. If the euclidian distance was lower than the mean distance the keypoint was added to the vector of  keypoint matches and keypoints for the bounding box.
 
 ```cpp
 // associate a given bounding box with the keypoints it contains
@@ -182,6 +183,7 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
 
 *Compute the time-to-collision in second for all matched 3D objects using only keypoint correspondences from the matched bounding boxes between current and previous frame.*
 
+The mean of euclidean distances between the current frame and previous frame matched keypoints were calculated. The median distance was then calculated to remove the outliers.
 
 ```cpp
 // Compute time-to-collision (TTC) based on keypoint correspondences in successive images
@@ -244,11 +246,68 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
 
 *Find examples where the TTC estimate of the Lidar sensor does not seem plausible. Describe your observations and provide a sound argumentation why you think this happened.*
 
+In image 7 we see a relatively large value for TTC based on minimum x value with an approximate time to collision of about 34 seconds. By using the median value instead we get a 12s approximate ttc which is more realistic. Possible explanation for this could be that the car in front of the braked.
+
+
+
+
+
+
+
+|TTC  |TopView  |
+|---------|---------|
+|<img src="images/Lidar/TTC_0006_6.jpg" width="820" height="250" />|<img src="images/3dObjects/3dObjects_0006.jpg" width="250" height="250" />|
+|<img src="images/Lidar/TTC_0007_4.jpg" width="820" height="250" />|<img src="images/3dObjects/3dObjects_0007.jpg" width="250" height="250" />|
+
+
+
+
+In image 12 we see a negative number for the ttc as computed by the x min value of the lidar points. Again by using the median value to calculate the time to collision we get a more realistic value of approx 9s. By inspecting the points mapped onto the bounding box we can see a difference in the points being mapped between image frame 11 and 12 with image 11 registering lidar points lower on the front car.
+
+|TTC  |TopView  |
+|---------|---------|
+|<img src="images/Lidar/TTC_0011_4.jpg" width="820" height="250" />|<img src="images/3dObjects/3dObjects_0011.jpg" width="250" height="250" />|
+|<img src="images/Lidar/TTC_0012_4.jpg" width="820" height="250" />|<img src="images/3dObjects/3dObjects_0012.jpg" width="250" height="250" />|
+
+
+Results below present the difference between using the minimum value of x and using a median of the x values of the lidar points. Although it will not give the minimum value of ttc it shows a more consistent calculation as the standard deviation of times is lower in the case of using the median value and therefor removes the infuence of outliers on the calculation.
+
+<img src="src/results/Lidar.jpg" width="800" height="1300" />
+
 
 **FP.6 Performance Evaluation 2**
 
 *Run several detector / descriptor combinations and look at the differences in TTC estimation. Find out which methods perform best and also include several examples where camera-based TTC estimation is way off. As with Lidar, describe your observations again and also look into potential reasons.*
 
+From the results we can see that using the vaious combinations of descriptor/detector gave similar results with the average ttc based on camera keypoints was around 12-13 seconds with the notable exception of ORB / ORB and ORB / BRIEF having a lot higher averages. 
+
+<img src="src/results/TTC_CAMERA.png" width="800" height="600" />
+
+We can see from the following examples that the keypoints on another car in the front left are also being matched.
+
+ORB/BRIEF
+|Keypoints  |
+|---------|
+|<img src="images/Camera/Keypoints_ORB_BRIEF_0009_4.jpg" width="820" height="250" />|
+|TTC  |
+|<img src="images/Camera/TTC_ORB_BRIEF_0009_4.jpg" width="820" height="250" />|
+
+ORB/ORB
+|Keypoints  |
+|---------|
+|<img src="images/Camera/Keypoints_ORB_ORB_0007_4.jpg" width="820" height="250" />|
+|TTC  |
+|<img src="images/Camera/TTC_ORB_ORB_0007_4.jpg" width="820" height="250" />|
+
+|Keypoints  |
+|---------|
+|<img src="images/Camera/Keypoints_ORB_ORB_0012_4.jpg" width="820" height="250" />|
+|TTC  |
+|<img src="images/Camera/TTC_ORB_ORB_0012_4.jpg" width="820" height="250" />|
+
+By examing the total amount of time for for detection, descripion and matching we can also see that detectors such as FAST using various descriptors (BRIEF, SIFT, FREAK) are able to perfom below the 100ms (required to achieve 10 frames per second) mark.
+
+<img src="src/results/TotalTime.png" width="800" height="600" />
 
 
 

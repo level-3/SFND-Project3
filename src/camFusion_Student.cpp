@@ -127,14 +127,14 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
         cv::line(topviewImg, cv::Point(0, y), cv::Point(imageSize.width, y), cv::Scalar(255, 0, 0));
     }
 
-    // display image
-    string windowName = "3D Objects";
-    cv::namedWindow(windowName, 1);
-    cv::imshow(windowName, topviewImg);
-    //cv::imwrite("../images/saved/image.jpg", topviewImg);
-
     if (bWait)
     {
+        // display image
+        string windowName = "3D Objects";
+        cv::namedWindow(windowName, 1);
+        cv::imshow(windowName, topviewImg);
+        string filename = "./images/saved/3dObjects_" + imgNumber + ".jpg";
+        //cv::imwrite(filename, topviewImg);
         cv::waitKey(0); // wait for key to be pressed
     }
 }
@@ -187,7 +187,8 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
         }
     }
 
-    cout << boundingBox.keypoints.size() << endl;
+    if (verbose)
+        cout << boundingBox.keypoints.size() << endl;
 }
 
 // Compute time-to-collision (TTC) based on keypoint correspondences in successive images
@@ -246,12 +247,12 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
 
 bool sortfunction(LidarPoint i, LidarPoint j) { return (i.x < j.x); }
 
-void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
+void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC, double &TTC_min)
 {
     // auxiliary variables
     double dT = 0.1;        // time between two measurements in seconds
     double laneWidth = 4.0; // assumed width of the ego lane
-    /*
+
     // find closest distance to Lidar points within ego lane
     double minXPrev = 1e9, minXCurr = 1e9;
     for (auto it = lidarPointsPrev.begin(); it != lidarPointsPrev.end(); ++it)
@@ -263,8 +264,9 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<Lidar
     {
         minXCurr = minXCurr > it->x ? it->x : minXCurr;
     }
-    */
-   
+    // compute TTC from both measurements
+    TTC_min = minXCurr * dT / (minXPrev - minXCurr);
+
     std::sort(lidarPointsPrev.begin(), lidarPointsPrev.end(), sortfunction);
     std::sort(lidarPointsCurr.begin(), lidarPointsCurr.end(), sortfunction);
 
@@ -297,13 +299,13 @@ void BoundingBoxDetails(BoundingBox &bb)
     std::cout << std::endl;
 }
 
-void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
+void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, string imgNumber, string detector, string descriptor)
 {
     // basic Idea = use keypoint matches between the previous and current image
     std::multimap<int, int> potential_matches;
     typedef std::multimap<int, int>::iterator MMAPIterator;
 
-    bool verbose = false;
+    bool verbose = true;
 
     if (verbose)
     {
@@ -313,7 +315,7 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
         DataFrameDetails(prevFrame);
     }
 
-    if (false)
+    if (verbose)
     {
         for (const auto &bb : currFrame.boundingBoxes)
         {
@@ -359,9 +361,7 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
             if (bb_prev.roi.contains(kp_prev.pt))
             {
                 id_prev = bb_prev.boxID;
-                //bb_prev.keypoints.push_back(kp_prev);
             }
-            //id_prev = (bb_prev.roi.contains(kp_prev.pt)) ? bb_prev.boxID : -1;
         }
 
         cv::KeyPoint kp_curr = currFrame.keypoints[it.trainIdx];
@@ -370,9 +370,7 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
             if (bb_curr.roi.contains(kp_curr.pt))
             {
                 id_curr = bb_curr.boxID;
-                //bb_curr.keypoints.push_back(kp_curr);
             }
-            //id_curr = (bb_curr.roi.contains(kp_curr.pt)) ? bb_curr.boxID : -1;
         }
 
         //store potential matches in a multimap
@@ -414,7 +412,11 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
             string windowName = "BB Keypoints";
             cv::namedWindow(windowName, 6);
             imshow(windowName, visImage);
-            cv::waitKey(0);
+            string filename = "./images/saved/BB/BB_" + imgNumber + "_" + to_string(bb.boxID) + ".jpg";
+
+            cv::imwrite(filename, visImage);
+            //std::cout << filename << endl;
+            //cv::waitKey(0);
         }
     }
     std::cout << endl;
